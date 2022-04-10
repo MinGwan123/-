@@ -1,0 +1,111 @@
+!wget --no-check-certificate \
+    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/horse-or-human.zip \
+    -O /tmp/horse-or-human.zip # zip 파일 다운로드, 학습 파일 불러오기
+    !wget --no-check-certificate \
+    https://storage.googleapis.com/laurencemoroney-blog.appspot.com/validation-horse-or-human.zip \
+    -O /tmp/validation-horse-or-human.zip # 테스트 및 검증 데이터셋 불러오기
+    #zipfile을 사용하여 임시 directory에 압출 해제
+
+import os
+import zipfile
+
+local_zip = '/tmp/horse-or-human.zip'
+zip_ref = zipfile.ZipFile(local_zip, 'r')
+zip_ref.extractall('/tmp/horse-or-human')
+local_zip = '/tmp/validation-horse-or-human.zip'
+zip_ref = zipfile.ZipFile(local_zip, 'r')
+zip_ref.extractall('/tmp/validation-horse-or-human')
+zip_ref.close()
+
+# Directory with our training horse pictures
+train_horse_dir = os.path.join('/tmp/horse-or-human/horses')
+
+# Directory with our training human pictures
+train_human_dir = os.path.join('/tmp/horse-or-human/humans')
+
+# Directory with our training horse pictures
+validation_horse_dir = os.path.join('/tmp/validation-horse-or-human/horses')
+
+# Directory with our training human pictures
+validation_human_dir = os.path.join('/tmp/validation-horse-or-human/humans')
+
+train_horse_names = os.listdir(train_horse_dir)
+train_human_names = os.listdir(train_human_dir)
+
+validation_horse_hames = os.listdir(validation_horse_dir)
+validation_human_names = os.listdir(validation_human_dir)
+
+import tensorflow as tf
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Conv2D(16, (3,3), activation='relu', input_shape=(150, 150, 3)), # 첫번째 convolution
+    tf.keras.layers.MaxPooling2D(2, 2), 
+    tf.keras.layers.Conv2D(32, (3,3), activation='relu'), # 두번째 convolution
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(64, (3,3), activation='relu'), # 세번째 convolution
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(64, (3,3), activation='relu'), # 네번째 convolution
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(64, (3,3), activation='relu'), # 다섯 번째 convolution
+    tf.keras.layers.MaxPooling2D(2,2),
+    # Flatten the results to feed into a DNN
+    tf.keras.layers.Flatten(),
+    # 512 neuron hidden layer
+    tf.keras.layers.Dense(512, activation='relu'),
+    tf.keras.layers.Dense(1, activation='sigmoid') # sigmoid 사용 -> 말인지 사람인지 표현을 0 또는 1로 표현하기 때문
+])
+
+model.summary()
+
+from tensorflow.keras.optimizers import RMSprop
+
+model.compile(loss='binary_crossentropy',
+              optimizer=RMSprop(learning_rate=0.001),
+              metrics=['accuracy'])
+              
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+train_datagen = ImageDataGenerator(rescale=1/255)
+validation_datagen = ImageDataGenerator(rescale=1/255)
+
+train_generator = train_datagen.flow_from_directory(
+        '/tmp/horse-or-human/',  
+        target_size=(150, 150),  
+        batch_size=128,
+        class_mode='binary')
+
+validation_generator = validation_datagen.flow_from_directory(
+        '/tmp/validation-horse-or-human/',  
+        target_size=(150, 150), 
+        batch_size=32,
+        class_mode='binary')
+history = model.fit(
+      train_generator,
+      steps_per_epoch=8,  
+      epochs=15,
+      verbose=1,
+      validation_data = validation_generator,
+      validation_steps=8)
+# 구축한 모델이 효과적으로 작동하는지 확인
+import numpy as np
+from google.colab import files
+from keras.preprocessing import image
+
+uploaded = files.upload()
+
+for fn in uploaded.keys():
+ 
+  # predicting images
+  path = '/content/' + fn
+  img = image.load_img(path, target_size=(150, 150))
+  x = image.img_to_array(img)
+  x = np.expand_dims(x, axis=0)
+
+  images = np.vstack([x])
+  classes = model.predict(images, batch_size=10)
+  print(classes[0])
+  if classes[0]>0.5:
+    print(fn + " is a human")
+  else:
+    print(fn + " is a horse")
+     
